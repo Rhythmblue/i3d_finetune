@@ -4,4 +4,4 @@ info = ['v_ApplyEyeMakeup_g01_c01', '/data4/zhouhao/dataset/ucf101/tvl1/v_ApplyE
 video = Video_3D(info, tag='flow')
 print(video)
 
-print(video.get_frames(5).shape)
+print(video.get_frames(163).shape)

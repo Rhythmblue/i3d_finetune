@@ -56,4 +56,4 @@ class Video_3D:
         return
 
     def __str__(self):
-        return '{:s} has {:d} frames, label is {:d}\nPath:{:s}'.format(self.name, self.total_frame_num, self.label, self.path)
+        return 'Video_3D:\nname: {:s}\nframes: {:d}\nlabel: {:d}\nPath: {:s}\n'.format(self.name, self.total_frame_num, self.label, self.path)
