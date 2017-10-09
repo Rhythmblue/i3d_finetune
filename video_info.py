@@ -25,6 +25,11 @@ def main(img_dir, txt_dir):
             length = int(length/2)
         f.write(video+' '+video_dir+' '+str(length)+' '+str(label)+'\n')
     f.close
+    f = open('class_map.txt', 'w')
+    for label in label_map:
+        f.write(label+'\n')
+    f.close
+
 
 if __name__ == '__main__':
     description = 'This script can get the info of videos into a txt.'

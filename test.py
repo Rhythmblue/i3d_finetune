@@ -1,7 +1,12 @@
-from rmb_lib.video_class import Video_3D
+from rmb_lib.action_dataset import *
+import time
 
-info = ['v_ApplyEyeMakeup_g01_c01', '/data4/zhouhao/dataset/ucf101/tvl1/v_ApplyEyeMakeup_g01_c01', '163','0']
-video = Video_3D(info, tag='flow')
-print(video)
+info = './data/ucf101/flow.txt'
+train_info, _ = split_data(info, './data/ucf101/testlist01.txt')
+train = Action_Dataset('ucf101', 'flow', train_info)
 
-print(video.get_frames(163).shape)
+start = time.time()
+a, b = train.next_batch(16,64)
+print(time.time()-start)
+print(a.shape)
+

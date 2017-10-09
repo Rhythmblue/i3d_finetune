@@ -3,7 +3,7 @@ import random
 from PIL import ImageOps
 
 
-def transform_data(data, crop_size=224, will_crop=True, will_flip=True):
+def transform_data(data, crop_size=224, will_crop=True, will_flip=False):
     length = data[0].size[0]
     width = data[0].size[1]
     if will_crop:

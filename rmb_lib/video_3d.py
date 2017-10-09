@@ -31,23 +31,22 @@ class Video_3D:
         start = random.randint(1, self.total_frame_num-frame_num+1)
         for i in range(start, start+frame_num):
             frames.extend(self.load_img(i))
-        frames = transform_data(frames)
-    
+        frames = transform_data(frames, crop_size=side_length)
+
         if is_numpy:
+            frames_np = []
             if self.tag == 'rgb':
-                frames_np = np.zeros(shape=(frame_num, side_length, side_length, 3))
                 for i, img in enumerate(frames):
-                    frames_np[i] = np.asarray(img)
+                    frames_np.append(np.asarray(img))
             elif self.tag == 'flow':
-                frames_np = np.zeros(shape=(frame_num, side_length, side_length, 2))
                 for i in range(0, len(frames), 2):
                     tmp = np.stack([np.asarray(frames[i]), np.asarray(frames[i+1])], axis=2)
-                    frames_np[int(i/2)] = tmp
-            return frames_np
+                    frames_np.append(tmp)
+            return np.stack(frames_np)
 
         return  frames
 
-  
+
     def load_img(self, index):
         img_dir = self.path
         if self.tag == 'rgb':

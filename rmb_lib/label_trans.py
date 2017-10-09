@@ -11,3 +11,4 @@ def trans_label(label_in, label_map):
         return label_map.index(label_in)
     elif isinstance(label_in, int):
         return label_map[label_in]
+    return
