@@ -13,7 +13,7 @@ class Action_Dataset:
         self.perm = np.arange(self.size)
 
 
-    def next_batch(self, batch_size, frame_num):
+    def next_batch(self, batch_size, frame_num, shuffle=True, data_augment=True):
         start = self.index_in_epoch
         end = start + batch_size
         self.index_in_epoch = end % self.size
@@ -23,17 +23,18 @@ class Action_Dataset:
             self.epoch_completed += 1
             for i in range(start, self.size):
                 batch.append(
-                    self.videos[self.perm[i]].get_frames(frame_num))
+                    self.videos[self.perm[i]].get_frames(frame_num, data_augment=data_augment))
                 label.append(self.videos[self.perm[i]].label)
-            np.random.shuffle(self.perm)
+            if shuffle:
+                np.random.shuffle(self.perm)
             for i in range(0, self.index_in_epoch):
                 batch.append(
-                    self.videos[self.perm[i]].get_frames(frame_num))
+                    self.videos[self.perm[i]].get_frames(frame_num, data_augment=data_augment))
                 label.append(self.videos[self.perm[i]].label)
         else:
             for i in range(start, end):
                 batch.append(
-                    self.videos[self.perm[i]].get_frames(frame_num))
+                    self.videos[self.perm[i]].get_frames(frame_num, data_augment=data_augment))
                 label.append(self.videos[self.perm[i]].label)
         return np.stack(batch), np.stack(label)
 

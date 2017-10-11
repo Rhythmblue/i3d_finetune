@@ -25,13 +25,13 @@ class Video_3D:
         self.tag = tag
         self.img_format = img_format
 
-    def get_frames(self, frame_num, side_length=224, is_numpy=True):
-        assert frame_num <= self.total_frame_num
+    def get_frames(self, frame_num, side_length=224, is_numpy=True, data_augment=False):
+        #assert frame_num <= self.total_frame_num
         frames = list()
-        start = random.randint(1, self.total_frame_num-frame_num+1)
+        start = random.randint(1, max(self.total_frame_num-frame_num, 0)+1)
         for i in range(start, start+frame_num):
-            frames.extend(self.load_img(i))
-        frames = transform_data(frames, crop_size=side_length)
+            frames.extend(self.load_img((i-1)%self.total_frame_num+1))
+        frames = transform_data(frames, crop_size=side_length, will_flip=data_augment)
 
         if is_numpy:
             frames_np = []
