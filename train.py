@@ -12,11 +12,11 @@ import i3d
 from rmb_lib.action_dataset import *
 
 
-_BATCH_SIZE = 10
+_BATCH_SIZE = 16
 _CLIP_SIZE = 16
 _FRAME_SIZE = 224 
-_LEARNING_RATE = 0.00005
-_GLOBAL_EPOCH = 20
+_LEARNING_RATE = 0.001
+_GLOBAL_EPOCH = 40
 
 
 _CHECKPOINT_PATHS = {
@@ -55,7 +55,6 @@ def main(dataset_name, data_tag):
     label_holder = tf.placeholder(tf.int32, [None])
     dropout_holder = tf.placeholder(tf.float32)
     is_train_holder = tf.placeholder(tf.bool)
-    tf.summary.image('demo', clip_holder[0], max_outputs=10)
   
     with tf.variable_scope(_SCOPE[train_data.tag]):
         model = i3d.InceptionI3d(400, spatial_squeeze=True, final_endpoint='Logits')
@@ -76,7 +75,7 @@ def main(dataset_name, data_tag):
             weight_l2 = tf.nn.l2_loss(variable)
             tf.add_to_collection('weight_l2', weight_l2)
     saver = tf.train.Saver(var_list=variable_map, reshape=True)
-    
+    saver2 = tf.train.Saver(max_to_keep=10)
 
     loss_weight = tf.add_n(tf.get_collection('weight_l2'), 'loss_weight')
     loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(
@@ -88,14 +87,15 @@ def main(dataset_name, data_tag):
 
     per_epoch_step = int(np.ceil(train_data.size/_BATCH_SIZE))
     global_step = _GLOBAL_EPOCH * per_epoch_step
-    decay_step = 10*per_epoch_step
+    decay_step = 2*per_epoch_step
+    global_index = tf.Variable(0, trainable=False)
     learning_rate = tf.train.exponential_decay(
-        _LEARNING_RATE, global_step, decay_step, 0.1, staircase=True)
+        _LEARNING_RATE, global_index, decay_step, 0.8, staircase=True)
     tf.summary.scalar('learning_rate', learning_rate)
 
     update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
     with tf.control_dependencies(update_ops):
-        optimizer = tf.train.MomentumOptimizer(learning_rate, 0.9).minimize(total_loss)
+        optimizer = tf.train.MomentumOptimizer(learning_rate, 0.9).minimize(total_loss, global_step=global_index)
 
     sess = tf.Session()
     merged = tf.summary.merge_all()
@@ -115,7 +115,7 @@ def main(dataset_name, data_tag):
         _, loss_now, loss_plus, predictions, summary = sess.run([optimizer, total_loss, loss_weight, top_k_op, merged],
                                feed_dict={clip_holder: clip,
                                           label_holder: label,
-                                          dropout_holder: 0.7,
+                                          dropout_holder: 0.6,
                                           is_train_holder: True})
         duration = time.time() - start_time
         true_count += np.sum(predictions)
@@ -127,6 +127,7 @@ def main(dataset_name, data_tag):
         if step % per_epoch_step ==0:
             accuracy = true_count/ (per_epoch_step*_BATCH_SIZE)
             print('Epoch%d, train accuracy: %.3f' % (train_data.epoch_completed, accuracy))
+            true_count = 0
         if step % (2*per_epoch_step) == 0:
             true_count = 0
             for i in range(per_test_step):
@@ -148,6 +149,8 @@ def main(dataset_name, data_tag):
             accuracy = true_count/ (per_test_step*_BATCH_SIZE)
             test_data.index_in_epoch = 0
             print('Epoch%d, test accuracy: %.3f' % (train_data.epoch_completed, accuracy))
+            if accuracy > 0.87:
+                saver2.save(sess, log_dir + '/ucf101_rgb_{:.3f}_model'.format(accuracy), step)
     train_writer.close()
     sess.close()
 
