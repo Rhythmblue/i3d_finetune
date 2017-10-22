@@ -12,7 +12,7 @@ import i3d
 from rmb_lib.action_dataset import *
 
 
-_BATCH_SIZE = 16
+_BATCH_SIZE = 24
 _CLIP_SIZE = 16
 _FRAME_SIZE = 224 
 _LEARNING_RATE = 0.001
