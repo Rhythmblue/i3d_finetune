@@ -12,11 +12,11 @@ import i3d
 from rmb_lib.action_dataset import *
 
 
-_BATCH_SIZE = 16
+_BATCH_SIZE = 10
 _CLIP_SIZE = 16
 _FRAME_SIZE = 224 
-_LEARNING_RATE = 0.0005
-_GLOBAL_EPOCH = 30
+_LEARNING_RATE = 0.001
+_GLOBAL_EPOCH = 40
 
 
 _CHECKPOINT_PATHS = {
@@ -35,7 +35,7 @@ _SCOPE = {
     'rgb': 'RGB',
     'flow': 'Flow',
 }
-
+tf.train.MomentumOptimizer
 log_dir = './model'
 if not os.path.exists(log_dir):
     os.makedirs(log_dir)
@@ -55,7 +55,7 @@ def main(dataset_name, data_tag):
     label_holder = tf.placeholder(tf.int32, [None])
     dropout_holder = tf.placeholder(tf.float32)
     is_train_holder = tf.placeholder(tf.bool)
-    tf.summary.image()
+    #tf.summary.image("demo", clip_holder[0], 6)
   
     with tf.variable_scope(_SCOPE[train_data.tag]):
         model = i3d.InceptionI3d(400, spatial_squeeze=True, final_endpoint='Logits')
@@ -88,15 +88,15 @@ def main(dataset_name, data_tag):
 
     per_epoch_step = int(np.ceil(train_data.size/_BATCH_SIZE))
     global_step = _GLOBAL_EPOCH * per_epoch_step
-    decay_step = per_epoch_step
+    decay_step = int(2*per_epoch_step)
     global_index = tf.Variable(0, trainable=False)
     learning_rate = tf.train.exponential_decay(
-        _LEARNING_RATE, global_index, decay_step, 0.75, staircase=True)
+        _LEARNING_RATE, global_index, decay_step, 0.7, staircase=True)
     tf.summary.scalar('learning_rate', learning_rate)
 
     update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
     with tf.control_dependencies(update_ops):
-        optimizer = tf.train.Adam(learning_rate).minimize(total_loss, global_step=global_index)
+        optimizer = tf.train.MomentumOptimizer(learning_rate, 0.9).minimize(total_loss, global_step=global_index)
 
     sess = tf.Session()
     merged = tf.summary.merge_all()
@@ -107,23 +107,31 @@ def main(dataset_name, data_tag):
 
     step = 0
     true_count = 0
+    tmp_count = 0
     accuracy_tmp = 0
     per_test_step = int(np.floor(test_data.size/_BATCH_SIZE))
     while step <= global_step:
         step += 1
         start_time = time.time()
         clip, label = train_data.next_batch(_BATCH_SIZE, _CLIP_SIZE)
-        clip = clip/255
+        if train_data.tag == 'rgb':
+            clip = clip/255
+        else:
+            clip = 2*(clip/255)-1
         _, loss_now, loss_plus, predictions, summary = sess.run([optimizer, total_loss, loss_weight, top_k_op, merged],
                                feed_dict={clip_holder: clip,
                                           label_holder: label,
                                           dropout_holder: 0.7,
                                           is_train_holder: True})
         duration = time.time() - start_time
-        true_count += np.sum(predictions)
+        tmp = np.sum(predictions)
+        true_count += tmp
+        tmp_count += tmp
         train_writer.add_summary(summary, step)
         if step % 20 == 0:
-            print('step: %-4d, loss: %-.4f (%.2f sec/batch)' % (step, loss_now, float(duration)))
+            accuracy = tmp_count / (20*_BATCH_SIZE)
+            print('step: %-4d, loss: %-.4f, accuracy: %.3f (%.2f sec/batch)' % (step, loss_now, accuracy, float(duration)))
+            tmp_count = 0
             # print(label)
             # print(predictions)
         if step % per_epoch_step ==0:
@@ -140,7 +148,10 @@ def main(dataset_name, data_tag):
                         _BATCH_SIZE, _CLIP_SIZE, shuffle=False, data_augment=False)
                     if(j != 2):
                         test_data.index_in_epoch = index
-                    clip = clip/255
+                    if train_data.tag == 'rgb':
+                        clip = clip/255
+                    else:
+                        clip = 2*(clip/255)-1
                     fc_now = sess.run(fc_out, feed_dict={clip_holder: clip,
                                                         label_holder: label,
                                                         dropout_holder: 1,
@@ -149,12 +160,13 @@ def main(dataset_name, data_tag):
                 predictions = np.argmax(fc_tmp, 1)
                 true_count += np.sum(predictions == label)
             accuracy = true_count/ (per_test_step*_BATCH_SIZE)
+            true_count = 0
             test_data.index_in_epoch = 0
             print('Epoch%d, test accuracy: %.3f' % (train_data.epoch_completed, accuracy))
-            if accuracy > 0.85:
+            if accuracy > 0.80:
                 if accuracy>accuracy_tmp:
                     accuracy_tmp = accuracy
-                    saver2.save(sess, log_dir + '/ucf101_rgb_{:.3f}_model'.format(accuracy), step)
+                    saver2.save(sess, log_dir + '/ucf101_'+train_data.tag+'_{:.3f}_model'.format(accuracy), step)
     train_writer.close()
     sess.close()
 
