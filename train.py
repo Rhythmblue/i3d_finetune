@@ -35,7 +35,12 @@ _SCOPE = {
     'rgb': 'RGB',
     'flow': 'Flow',
 }
-tf.train.MomentumOptimizer
+
+_CLASS_NUM = {
+    'ucf101': 101,
+    'hmdb51': 51
+}
+
 log_dir = './model'
 if not os.path.exists(log_dir):
     os.makedirs(log_dir)
@@ -47,8 +52,7 @@ def main(dataset_name, data_tag):
         os.path.join('./data', dataset_name, 'testlist01.txt'))
     train_data = Action_Dataset(dataset_name, data_tag, train_info)
     test_data = Action_Dataset(dataset_name, data_tag, test_info)
-    with open(os.path.join('./data', dataset_name, 'label_map.txt')) as f:
-        label_map = [x.strip() for x in f.readlines()]
+
 
     clip_holder = tf.placeholder(
         tf.float32, [None, None, _FRAME_SIZE, _FRAME_SIZE, _CHANNEL[train_data.tag]])
@@ -56,12 +60,12 @@ def main(dataset_name, data_tag):
     dropout_holder = tf.placeholder(tf.float32)
     is_train_holder = tf.placeholder(tf.bool)
     #tf.summary.image("demo", clip_holder[0], 6)
-  
+
     with tf.variable_scope(_SCOPE[train_data.tag]):
         model = i3d.InceptionI3d(400, spatial_squeeze=True, final_endpoint='Logits')
         logits, _ = model(clip_holder, is_training=is_train_holder, dropout_keep_prob=dropout_holder)
         logits_dropout = tf.nn.dropout(logits, dropout_holder)   
-        fc_out = tf.layers.dense(logits_dropout, 101, tf.nn.relu, use_bias=True)
+        fc_out = tf.layers.dense(logits_dropout, _CLASS_NUM[dataset_name], tf.nn.relu, use_bias=True)
         top_k_op = tf.nn.in_top_k(fc_out, label_holder, 1)
 
     variable_map = {}
@@ -109,7 +113,6 @@ def main(dataset_name, data_tag):
     true_count = 0
     tmp_count = 0
     accuracy_tmp = 0
-    per_test_step = int(np.floor(test_data.size/_BATCH_SIZE))
     while step <= global_step:
         step += 1
         start_time = time.time()
@@ -140,33 +143,27 @@ def main(dataset_name, data_tag):
             true_count = 0
         if step % (2*per_epoch_step) == 0:
             true_count = 0
-            for i in range(per_test_step):
-                fc_tmp = np.zeros([_BATCH_SIZE,101])
-                for j in range(3):
-                    index = test_data.index_in_epoch
-                    clip, label = test_data.next_batch(
-                        _BATCH_SIZE, _CLIP_SIZE, shuffle=False, data_augment=False)
-                    if(j != 2):
-                        test_data.index_in_epoch = index
-                    if train_data.tag == 'rgb':
-                        clip = clip/255
-                    else:
-                        clip = 2*(clip/255)-1
-                    fc_now = sess.run(fc_out, feed_dict={clip_holder: clip,
-                                                        label_holder: label,
-                                                        dropout_holder: 1,
-                                                        is_train_holder: False})
-                    fc_tmp += fc_now
-                predictions = np.argmax(fc_tmp, 1)
-                true_count += np.sum(predictions == label)
-            accuracy = true_count/ (per_test_step*_BATCH_SIZE)
+            for i in range(test_data.size):
+                clip, label = test_data.next_batch(
+                    1, test_data.videos[i].total_frame_num, shuffle=False, data_augment=False)
+                if test_data.tag == 'rgb':
+                    clip = clip/255
+                else:
+                    clip = 2*(clip/255)-1
+                predictions = sess.run(top_k_op,feed_dict={clip_holder: clip,
+                                                           label_holder: label,
+                                                           dropout_holder: 1,
+                                                           is_train_holder: False})
+                true_count += np.sum(predictions)
+            accuracy = true_count/ test_data.size
             true_count = 0
             test_data.index_in_epoch = 0
             print('Epoch%d, test accuracy: %.3f' % (train_data.epoch_completed, accuracy))
             if accuracy > 0.80:
                 if accuracy>accuracy_tmp:
                     accuracy_tmp = accuracy
-                    saver2.save(sess, log_dir + '/ucf101_'+train_data.tag+'_{:.3f}_model'.format(accuracy), step)
+                    saver2.save(sess,
+                        os.path.join(log_dir, test_data.dataset_name+'_'+train_data.tag+'_{:.3f}_model'.format(accuracy)), step)
     train_writer.close()
     sess.close()
 

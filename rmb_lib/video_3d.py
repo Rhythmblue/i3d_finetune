@@ -31,7 +31,7 @@ class Video_3D:
         start = random.randint(1, max(self.total_frame_num-frame_num, 0)+1)
         for i in range(start, start+frame_num):
             frames.extend(self.load_img((i-1)%self.total_frame_num+1))
-        frames = transform_data(frames, crop_size=side_length, will_flip=data_augment)
+        frames = transform_data(frames, crop_size=side_length, random_crop=data_augment, random_flip=data_augment)
 
         if is_numpy:
             frames_np = []
