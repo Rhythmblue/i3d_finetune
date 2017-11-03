@@ -6,24 +6,23 @@ import os
 import argparse
 import time
 import numpy as np
+import logging
 import tensorflow as tf
 
 import i3d 
 from rmb_lib.action_dataset import *
 
 
-_BATCH_SIZE = 1
+_BATCH_SIZE = 10
 _CLIP_SIZE = 16
 _FRAME_SIZE = 224 
-_LEARNING_RATE = 0.01
-_GLOBAL_EPOCH = 10
+_LEARNING_RATE = 0.001
+_GLOBAL_EPOCH = 40
 
 
 _CHECKPOINT_PATHS = {
-    'rgb': './data/checkpoints/rgb_scratch/model.ckpt',
-    'flow': './data/checkpoints/flow_scratch/model.ckpt',
-    'rgb_imagenet': './data/checkpoints/rgb_imagenet/model.ckpt',
-    'flow_imagenet': './data/checkpoints/flow_imagenet/model.ckpt',
+    'rgb': '/data4/zhouhao/action_recognition/i3d/model/rgb_910/ucf101_rgb_0.910_model-22260',
+    'flow': '/data4/zhouhao/action_recognition/i3d/model/flow_849/ucf101_flow_0.849_model-24804'
 }
 
 _CHANNEL = {
@@ -36,81 +35,110 @@ _SCOPE = {
     'flow': 'Flow',
 }
 
+_CLASS_NUM = {
+    'ucf101': 101,
+    'hmdb51': 51
+}
+
 
 def main(dataset_name, data_tag):
-    assert data_tag in ['rgb', 'flow']
-    train_info, test_info = split_data(
-        os.path.join('./data', dataset_name, data_tag+'.txt'),
-        os.path.join('./data', dataset_name, 'testlist.txt'))
-    train_data = Action_Dataset(dataset_name, data_tag, train_info)
-    test_data = Action_Dataset(dataset_name, data_tag, test_info)
-    with open(os.path.join('./data', dataset_name, 'label_map.txt')) as f:
-        label_map = [x.strip() for x in f.readlines()]
+    assert data_tag in ['rgb', 'flow', 'mixed']
 
-    clip_holder = tf.placeholder(
-        tf.float32, [None, None, _FRAME_SIZE, _FRAME_SIZE, _CHANNEL[train_data.tag]])
+    logging.basicConfig(level=logging.INFO, filename='hard_video.txt', format='%s')
+
+    _, test_info = split_data(
+        os.path.join('./data', dataset_name, 'rgb'+'.txt'),
+        os.path.join('./data', dataset_name, 'testlist01.txt'))
+    _, test_info1 = split_data(
+        os.path.join('./data', dataset_name, 'flow'+'.txt'),
+        os.path.join('./data', dataset_name, 'testlist01.txt'))
+
     label_holder = tf.placeholder(tf.int32, [None])
-    dropout_holder = tf.placeholder(tf.float32)
-    is_train_holder = tf.placeholder(tf.bool)
-  
-    with tf.variable_scope(_SCOPE[train_data.tag]):
-        model = i3d.InceptionI3d(400, spatial_squeeze=True, final_endpoint='Logits')
-        logits, _ = model(clip_holder, is_training=is_train_holder, dropout_keep_prob=dropout_holder)    
+    if data_tag in ['rgb', 'mixed']:
+        rgb_data = Action_Dataset(dataset_name, 'rgb', test_info)
+        rgb_holder = tf.placeholder(
+            tf.float32, [None, None, _FRAME_SIZE, _FRAME_SIZE, _CHANNEL['rgb']])
+    if data_tag in ['flow', 'mixed']:
+        flow_data = Action_Dataset(dataset_name, 'flow', test_info1)
+        flow_holder = tf.placeholder(
+            tf.float32, [None, None, _FRAME_SIZE, _FRAME_SIZE, _CHANNEL['flow']])
 
-    variable_map = {}
-    train_var = []
-    for variable in tf.global_variables():
-        tmp = variable.name.split('/')
-        if tmp[2] == 'Logits':
-            train_var.append(variable)
-        if tmp[0] == _SCOPE[train_data.tag]:
-            variable_map[variable.name.replace(':0', '')] = variable
-        if tmp[-1] == 'w:0':
-            weight_l2 = tf.nn.l2_loss(variable)
-            tf.add_to_collection('weight_l2', weight_l2)
-    print(train_var)
-    saver = tf.train.Saver(var_list=variable_map, reshape=True)
-    top_k_op = tf.nn.in_top_k(logits, label_holder, 1)
 
-    loss_weight = tf.add_n(tf.get_collection('weight_l2'), 'loss_weight')
-    loss = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(
-        labels=label_holder, logits=logits))
-    total_loss = loss #+ 1e-7 * loss_weight
-    tf.summary.scalar('total_loss', total_loss)
+    if data_tag in ['rgb', 'mixed']:
+        with tf.variable_scope(_SCOPE['rgb']):
+            rgb_model = i3d.InceptionI3d(400, spatial_squeeze=True, final_endpoint='Logits')
+            rgb_logits, _ = rgb_model(rgb_holder, is_training=False, dropout_keep_prob=1)
+            rgb_logits_dropout = tf.nn.dropout(rgb_logits, 1)   
+            rgb_fc_out = tf.layers.dense(rgb_logits_dropout, _CLASS_NUM[dataset_name], tf.nn.relu, use_bias=True)
+            rgb_top_k_op = tf.nn.in_top_k(rgb_fc_out, label_holder, 1)
 
-    per_epoch_step = int(np.ceil(train_data.size/_BATCH_SIZE))
-    global_step = _GLOBAL_EPOCH * per_epoch_step
-    decay_step = 2*per_epoch_step
-    learning_rate = tf.train.exponential_decay(
-        _LEARNING_RATE, global_step, decay_step, 0.1, staircase=True)
-    tf.summary.scalar('learning_rate', learning_rate)
+    if data_tag in ['flow', 'mixed']:
+        with tf.variable_scope(_SCOPE['flow']):
+            flow_model = i3d.InceptionI3d(400, spatial_squeeze=True, final_endpoint='Logits')
+            flow_logits, _ = flow_model(flow_holder, is_training=False, dropout_keep_prob=1)
+            flow_logits_dropout = tf.nn.dropout(flow_logits, 1)   
+            flow_fc_out = tf.layers.dense(flow_logits_dropout, _CLASS_NUM[dataset_name], tf.nn.relu, use_bias=True)
+            flow_top_k_op = tf.nn.in_top_k(flow_fc_out, label_holder, 1)
 
-    update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
-    with tf.control_dependencies(update_ops):
-        optimizer = tf.train.GradientDescentOptimizer(learning_rate).minimize(total_loss)
+    variable_map = []
+    if data_tag in ['rgb', 'mixed']:
+        for variable in tf.global_variables():
+            tmp = variable.name.split('/')
+            if tmp[0] == _SCOPE['rgb']:
+                variable_map.append(variable)
+        rgb_saver = tf.train.Saver(var_list=variable_map, reshape=True)
+    variable_map = []
+    if data_tag in ['flow', 'mixed']:
+        for variable in tf.global_variables():
+            tmp = variable.name.split('/')
+            if tmp[0] == _SCOPE['flow']:
+                variable_map.append(variable)
+        flow_saver = tf.train.Saver(var_list=variable_map, reshape=True)
+
+    if data_tag == 'rgb':
+        fc_out = rgb_fc_out
+    if data_tag == 'flow':
+        fc_out = flow_fc_out
+    if data_tag == 'mixed':
+        fc_out = rgb_fc_out + flow_fc_out
+    top_k_op = tf.nn.in_top_k(fc_out, label_holder, 1)
+
 
     sess = tf.Session()
     sess.run(tf.global_variables_initializer())
-    saver.restore(sess, _CHECKPOINT_PATHS[train_data.tag+'_imagenet'])
+    if data_tag in ['rgb', 'mixed']:
+        rgb_saver.restore(sess, _CHECKPOINT_PATHS['rgb'])
+    if data_tag in ['flow', 'mixed']:
+        flow_saver.restore(sess, _CHECKPOINT_PATHS['flow'])
+
     print('----Here we start!----')
+    true_count = 0
+    video_size = len(test_info)
+    for i in range(video_size):
+        feed_dict = {}
+        if data_tag in ['rgb', 'mixed']:
+            rgb_clip, label = rgb_data.next_batch(
+                1, rgb_data.videos[i].total_frame_num, shuffle=False, data_augment=False)
+            rgb_clip = rgb_clip/255
+            feed_dict[rgb_holder] = rgb_clip
+            video_name = rgb_data.videos[i].name
+        if data_tag in ['flow', 'mixed']:
+            flow_clip, label = flow_data.next_batch(
+                1, flow_data.videos[i].total_frame_num, shuffle=False, data_augment=False)
+            flow_clip = 2*(flow_clip/255)-1
+            feed_dict[flow_holder] = flow_clip
+            video_name = flow_data.videos[i].name
+        feed_dict[label_holder] = label
+        predictions = sess.run(top_k_op,feed_dict)
+        tmp = np.sum(predictions)
+        true_count += tmp
+        print('Video%d: %d, accuracy: %.3f (%d/%d) , name:%s' % (i+1, tmp, true_count/video_size, true_count, video_size, video_name))
+        if tmp==0:
+            logging.info(video_name)
+    accuracy = true_count/ video_size
+    print('test accuracy: %.3f' % (accuracy))
 
-    clip, label = test_data.next_batch(
-        _BATCH_SIZE, _CLIP_SIZE, shuffle=False, data_augment=False)
-    clip = clip/255
-    out_logits = sess.run(logits, feed_dict={clip_holder: clip,
-                                               label_holder: label,
-                                               dropout_holder: 1,
-                                               is_train_holder: False})
-    print(out_logits.shape)
-    out_logits = out_logits[0]
-    sorted_indices = np.argsort(out_logits)[::-1]
-
-    print('\nTop classes and probabilities')
-    _LABEL_MAP_PATH = 'data/label_map.txt'
-    kinetics_classes = [x.strip() for x in open(_LABEL_MAP_PATH)]
-    print(len(kinetics_classes))
-    for index in sorted_indices[:20]:
-      print(out_logits[index], kinetics_classes[index])
+    sess.close()
 
 
 if __name__ == '__main__':
