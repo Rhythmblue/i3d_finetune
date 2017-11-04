@@ -43,7 +43,7 @@ if not os.path.exists(log_dir):
 def main(dataset_name, data_tag):
     assert data_tag in ['rgb', 'flow', 'mixed']
 
-    # logging.basicConfig(level=logging.WARNING, filename='test_log.txt', filemode='w', format='%(message)s')
+    # logging.basicConfig(level=logging.INFO, filename=os.path.join(log_dir, 'log_'+data_tag+'.txt'), filemode='w', format='%(message)s')
 
     label_map = get_label_map(os.path.join('data', dataset_name, 'label_map.txt'))
 
@@ -105,9 +105,10 @@ def main(dataset_name, data_tag):
     softmax = tf.nn.softmax(fc_out)
     top_k_op = tf.nn.in_top_k(fc_out, label_holder, 1)
 
-    config = tf.ConfigProto()
-    config.gpu_options.per_process_gpu_memory_fraction = 0.4
-    sess = tf.Session(config=config)
+    # config = tf.ConfigProto()
+    # config.gpu_options.per_process_gpu_memory_fraction = 0.4
+    # sess = tf.Session(config=config)
+    sess = tf.Session()
     sess.run(tf.global_variables_initializer())
     if data_tag in ['rgb', 'mixed']:
         rgb_saver.restore(sess, _CHECKPOINT_PATHS['rgb'])
@@ -137,14 +138,17 @@ def main(dataset_name, data_tag):
         tmp = np.sum(top_1)
         true_count += tmp
         print('Video%d: %d, accuracy: %.4f (%d/%d) , name:%s' % (i+1, tmp, true_count/video_size, true_count, video_size, video_name))
+        # logging.info('Video%d: %d, accuracy: %.4f (%d/%d) , name:%s' % (i+1, tmp, true_count/video_size, true_count, video_size, video_name))
         if tmp==0:
             wrong_answer = np.argmax(predictions, axis=1)[0]
             print('---->answer: %s, probability: %.2f' % (trans_label(wrong_answer, label_map), predictions[0, wrong_answer]))
+            # logging.info('---->answer: %s, probability: %.2f' % (trans_label(wrong_answer, label_map), predictions[0, wrong_answer]))
             error_record.write(
                 'video: %s, answer: %s, probability: %.2f\n' % (video_name, trans_label(wrong_answer, label_map), predictions[0, wrong_answer]))
     error_record.close()
     accuracy = true_count/ video_size
     print('test accuracy: %.4f' % (accuracy))
+    # logging.info('test accuracy: %.4f' % (accuracy))
     sess.close()
 
 

@@ -12,8 +12,8 @@ import i3d
 from rmb_lib.action_dataset import *
 
 
-_BATCH_SIZE = 10
-_CLIP_SIZE = 16
+_BATCH_SIZE = 12
+_CLIP_SIZE = 32
 _FRAME_SIZE = 224 
 _LEARNING_RATE = 0.001
 _GLOBAL_EPOCH = 40
@@ -108,6 +108,7 @@ def main(dataset_name, data_tag):
     sess.run(tf.global_variables_initializer())
     saver.restore(sess, _CHECKPOINT_PATHS[train_data.tag+'_imagenet'])
     print('----Here we start!----')
+    # logging.info('----Here we start!----')
 
     step = 0
     true_count = 0
@@ -134,12 +135,14 @@ def main(dataset_name, data_tag):
         if step % 20 == 0:
             accuracy = tmp_count / (20*_BATCH_SIZE)
             print('step: %-4d, loss: %-.4f, accuracy: %.3f (%.2f sec/batch)' % (step, loss_now, accuracy, float(duration)))
+            # logging.info('step: %-4d, loss: %-.4f, accuracy: %.3f (%.2f sec/batch)' % (step, loss_now, accuracy, float(duration)))
             tmp_count = 0
             # print(label)
             # print(predictions)
         if step % per_epoch_step ==0:
             accuracy = true_count/ (per_epoch_step*_BATCH_SIZE)
             print('Epoch%d, train accuracy: %.3f' % (train_data.epoch_completed, accuracy))
+            # logging.info('Epoch%d, train accuracy: %.3f' % (train_data.epoch_completed, accuracy))
             true_count = 0
         if step % (2*per_epoch_step) == 0:
             true_count = 0
@@ -159,8 +162,9 @@ def main(dataset_name, data_tag):
             true_count = 0
             test_data.index_in_epoch = 0
             print('Epoch%d, test accuracy: %.3f' % (train_data.epoch_completed, accuracy))
+            # logging.info('Epoch%d, test accuracy: %.3f' % (train_data.epoch_completed, accuracy))
             if accuracy > 0.80:
-                if accuracy>accuracy_tmp:
+                if accuracy > accuracy_tmp:
                     accuracy_tmp = accuracy
                     saver2.save(sess,
                         os.path.join(log_dir, test_data.dataset_name+'_'+train_data.tag+'_{:.3f}_model'.format(accuracy)), step)
