@@ -52,8 +52,10 @@ class Video_3D:
         if self.tag == 'rgb':
             return [Image.open(os.path.join(img_dir, self.img_format.format(index, ''))).convert('RGB')]
         if self.tag == 'flow':
-            u_img = Image.open(os.path.join(img_dir, self.img_format.format(index, '_u'))).convert('L')
-            v_img = Image.open(os.path.join(img_dir, self.img_format.format(index, '_v'))).convert('L')
+            # u_img = Image.open(os.path.join(img_dir, self.img_format.format(index, '_u'))).convert('L')
+            # v_img = Image.open(os.path.join(img_dir, self.img_format.format(index, '_v'))).convert('L')
+            u_img = Image.open(os.path.join(img_dir.format('u'), self.img_format.format(index, ''))).convert('L')
+            v_img = Image.open(os.path.join(img_dir.format('v'), self.img_format.format(index, ''))).convert('L')
             return [u_img,v_img]
         return
 

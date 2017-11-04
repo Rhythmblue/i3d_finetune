@@ -2,7 +2,7 @@ def get_label_map(file):
     label_map = []
     with open(file) as f:
         for line in f.readlines():
-            label_map.append(line.strip().split(' ')[1])
+            label_map.append(line.strip())
     return label_map
 
 
