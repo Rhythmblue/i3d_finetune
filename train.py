@@ -47,6 +47,8 @@ if not os.path.exists(log_dir):
 
 def main(dataset_name, data_tag):
     assert data_tag in ['rgb', 'flow']
+    # logging.basicConfig(level=logging.INFO, filename='log.txt', filemode='w', format='%(message)s')
+
     train_info, test_info = split_data(
         os.path.join('./data', dataset_name, data_tag+'.txt'),
         os.path.join('./data', dataset_name, 'testlist01.txt'))
@@ -122,13 +124,13 @@ def main(dataset_name, data_tag):
             clip = clip/255
         else:
             clip = 2*(clip/255)-1
-        _, loss_now, loss_plus, predictions, summary = sess.run([optimizer, total_loss, loss_weight, top_k_op, merged],
+        _, loss_now, loss_plus, top_1, summary = sess.run([optimizer, total_loss, loss_weight, top_k_op, merged],
                                feed_dict={clip_holder: clip,
                                           label_holder: label,
                                           dropout_holder: 0.7,
                                           is_train_holder: True})
         duration = time.time() - start_time
-        tmp = np.sum(predictions)
+        tmp = np.sum(top_1)
         true_count += tmp
         tmp_count += tmp
         train_writer.add_summary(summary, step)
@@ -138,36 +140,36 @@ def main(dataset_name, data_tag):
             # logging.info('step: %-4d, loss: %-.4f, accuracy: %.3f (%.2f sec/batch)' % (step, loss_now, accuracy, float(duration)))
             tmp_count = 0
             # print(label)
-            # print(predictions)
+            # print(top_1)
         if step % per_epoch_step ==0:
             accuracy = true_count/ (per_epoch_step*_BATCH_SIZE)
             print('Epoch%d, train accuracy: %.3f' % (train_data.epoch_completed, accuracy))
             # logging.info('Epoch%d, train accuracy: %.3f' % (train_data.epoch_completed, accuracy))
             true_count = 0
-        if step % (2*per_epoch_step) == 0:
-            true_count = 0
-            for i in range(test_data.size):
-                clip, label = test_data.next_batch(
-                    1, test_data.videos[i].total_frame_num, shuffle=False, data_augment=False)
-                if test_data.tag == 'rgb':
-                    clip = clip/255
-                else:
-                    clip = 2*(clip/255)-1
-                predictions = sess.run(top_k_op,feed_dict={clip_holder: clip,
-                                                           label_holder: label,
-                                                           dropout_holder: 1,
-                                                           is_train_holder: False})
-                true_count += np.sum(predictions)
-            accuracy = true_count/ test_data.size
-            true_count = 0
-            test_data.index_in_epoch = 0
-            print('Epoch%d, test accuracy: %.3f' % (train_data.epoch_completed, accuracy))
-            # logging.info('Epoch%d, test accuracy: %.3f' % (train_data.epoch_completed, accuracy))
-            if accuracy > 0.80:
-                if accuracy > accuracy_tmp:
-                    accuracy_tmp = accuracy
-                    saver2.save(sess,
-                        os.path.join(log_dir, test_data.dataset_name+'_'+train_data.tag+'_{:.3f}_model'.format(accuracy)), step)
+            if step % per_epoch_step == 0 and accuracy > 0.85:
+                true_count = 0
+                for i in range(test_data.size):
+                    clip, label = test_data.next_batch(
+                        1, test_data.videos[i].total_frame_num, shuffle=False, data_augment=False)
+                    if test_data.tag == 'rgb':
+                        clip = clip/255
+                    else:
+                        clip = 2*(clip/255)-1
+                    top_1 = sess.run(top_k_op,feed_dict={clip_holder: clip,
+                                                            label_holder: label,
+                                                            dropout_holder: 1,
+                                                            is_train_holder: False})
+                    true_count += np.sum(top_1)
+                accuracy = true_count/ test_data.size
+                true_count = 0
+                test_data.index_in_epoch = 0
+                print('Epoch%d, test accuracy: %.3f' % (train_data.epoch_completed, accuracy))
+                # logging.info('Epoch%d, test accuracy: %.3f' % (train_data.epoch_completed, accuracy))
+                if accuracy > 0.85:
+                    if accuracy > accuracy_tmp:
+                        accuracy_tmp = accuracy
+                        saver2.save(sess,
+                            os.path.join(log_dir, test_data.dataset_name+'_'+train_data.tag+'_{:.3f}_model'.format(accuracy)), step)
     train_writer.close()
     sess.close()
 
