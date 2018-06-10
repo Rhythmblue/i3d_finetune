@@ -1,4 +1,8 @@
-Sorry for that I am preparing my final test of this term.
-I will updata README around Jan, 2018.
-You can try to read my code and run "python train.py ucf101 rgb".
-This repo can only be used on UCF101 now.
+Note:
+My team has merged this repo with some other code into a new repo.
+The new repo offers codes and pretrained models.
+https://github.com/USTC-Video-Understanding/I3D_Finetune
+
+
+If you want to know how to extract flow by python and cpu,
+you can read the issue of this repo.
