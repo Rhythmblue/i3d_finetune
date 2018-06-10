@@ -1,8 +1,9 @@
 Note:
-My team has merged this repo with some other code into a new repo.
+My team has merged this repo with some other codes into a new repo.
 The new repo offers codes and pretrained models.
 https://github.com/USTC-Video-Understanding/I3D_Finetune
 
 
 If you want to know how to extract flow by python and cpu,
 you can read the issue of this repo.
+https://github.com/Rhythmblue/i3d_finetune/issues/2
